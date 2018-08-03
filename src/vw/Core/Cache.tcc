@@ -114,7 +114,7 @@ void Cache::CacheLine<GeneratorT>::release() {
 template <class GeneratorT>
 bool Cache::CacheLine<GeneratorT>::valid() {
   Mutex::WriteLock line_lock(m_mutex);
-  return m_value;
+  return (m_value.get() != 0);
 }
 
 template <class GeneratorT>

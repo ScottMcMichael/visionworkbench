@@ -83,7 +83,7 @@ namespace vw {
     ImageIterT   m_iter;
     FuncT const& m_func;
   public:
-    typedef typename boost::result_of<FuncT(typename ImageIterT::pixel_type)>::type              result_type;
+    typedef typename boost::result_of<FuncT(typename ImageIterT::result_type)>::type             result_type;
     typedef typename boost::remove_cv<typename boost::remove_reference<result_type>::type>::type pixel_type;
     typedef typename ImageIterT::offset_type offset_type;
 
@@ -104,7 +104,7 @@ namespace vw {
     ImageT m_image;
     FuncT  m_func;
   public:
-    typedef typename boost::result_of<FuncT(typename ImageT::pixel_type)>::type                  result_type;
+    typedef typename boost::result_of<FuncT(typename ImageT::result_type)>::type                 result_type;
     typedef typename boost::remove_cv<typename boost::remove_reference<result_type>::type>::type pixel_type;
     typedef UnaryPerPixelAccessor<typename ImageT::pixel_accessor, FuncT>                        pixel_accessor;
 

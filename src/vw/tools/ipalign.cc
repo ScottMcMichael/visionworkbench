@@ -366,11 +366,10 @@ void handle_arguments( int argc, char* argv[], Options& opt ) {
     vw_throw( ArgumentErr() << "Error parsing input:\n\t" << e.what() << general_options );
   }
 
-  std::ostringstream usage;
-  usage << "Usage: " << argv[0] << " <left image> <right image> <left camera model> <right camera model>\n";
+  std::string usage = "Usage: ipalign <left image> <right image> <left camera model> <right camera model>\n";
 
   if ( vm.count("help") )
-    vw_throw( ArgumentErr() << usage.str() << general_options );
+    vw_throw( ArgumentErr() << usage << general_options );
 
   boost::to_lower(opt.interest_operator);
   boost::to_lower(opt.descriptor_generator);

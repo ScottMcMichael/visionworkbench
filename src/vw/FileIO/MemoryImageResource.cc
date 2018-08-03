@@ -35,67 +35,12 @@
 #  include <vw/FileIO/MemoryImageResourceOpenEXR.h>
 #endif
 
-#include <map>
-
-#include <boost/assign/list_of.hpp>
-#include <boost/lambda/construct.hpp>
-#include <boost/function.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
+
 namespace {
-  typedef boost::function<vw::SrcMemoryImageResource*(const boost::shared_array<const vw::uint8>, size_t)> open_func;
-  typedef boost::function<vw::DstMemoryImageResource*(const vw::ImageFormat&)> create_func;
-
-  typedef std::map<std::string, open_func> open_map_t;
-  typedef std::map<std::string, create_func> create_map_t;
-
-#define OPEN(Name, Type) (Name, boost::lambda::new_ptr<vw::SrcMemoryImageResource ## Type>())
-#define CREAT(Name, Type) (Name, boost::lambda::new_ptr<vw::DstMemoryImageResource ## Type>())
-
-  open_map_t open_map = boost::assign::list_of<std::pair<std::string, open_func> >
-#if defined(VW_HAVE_PKG_JPEG) && VW_HAVE_PKG_JPEG==1
-    OPEN("jpg",        JPEG)
-    OPEN("jpeg",       JPEG)
-    OPEN("image/jpeg", JPEG)
-#endif
-#if defined(VW_HAVE_PKG_PNG) && VW_HAVE_PKG_PNG==1
-    OPEN("png",        PNG)
-    OPEN("image/png",  PNG)
-#endif
-#if defined(VW_HAVE_PKG_GDAL) && VW_HAVE_PKG_GDAL==1
-    OPEN("tif",        GDAL)
-    OPEN("tiff",       GDAL)
-    OPEN("image/tiff", GDAL)
-#endif
-#if defined(VW_HAVE_PKG_OPENEXR) && VW_HAVE_PKG_OPENEXR==1
-    OPEN("exr",        OpenEXR)
-    OPEN("image/exr",  OpenEXR)
-#endif
-    ;
-
-  create_map_t create_map = boost::assign::list_of<std::pair<std::string, create_func> >
-#if defined(VW_HAVE_PKG_JPEG) && VW_HAVE_PKG_JPEG==1
-    CREAT("jpg",        JPEG)
-    CREAT("jpeg",       JPEG)
-    CREAT("image/jpeg", JPEG)
-#endif
-#if defined(VW_HAVE_PKG_PNG) && VW_HAVE_PKG_PNG==1
-    CREAT("png",        PNG)
-    CREAT("image/png",  PNG)
-#endif
-#if defined(VW_HAVE_PKG_GDAL) && VW_HAVE_PKG_GDAL==1
-    CREAT("tif",        GDAL)
-    CREAT("tiff",       GDAL)
-    CREAT("image/tiff", GDAL)
-#endif
-#if defined(VW_HAVE_PKG_OPENEXR) && VW_HAVE_PKG_OPENEXR==1
-    CREAT("exr",        OpenEXR)
-    CREAT("image/exr",  OpenEXR)
-#endif
-    ;
-
    std::string clean_type(const std::string& type) {
      return boost::to_lower_copy(boost::trim_left_copy_if(type, boost::is_any_of(".")));
    }
@@ -108,18 +53,55 @@ namespace vw {
     return SrcMemoryImageResource::open(type, p, len);
   }
 
-  SrcMemoryImageResource* SrcMemoryImageResource::open( const std::string& type, boost::shared_array<const uint8> data, size_t len ) {
-    open_map_t::const_iterator i = open_map.find(clean_type(type));
-    if (i == open_map.end())
+  SrcMemoryImageResource* SrcMemoryImageResource::open( const std::string& type,
+                                                        boost::shared_array<const uint8> data, size_t len ) {
+    const std::string ct = clean_type(type);
+    SrcMemoryImageResource* result = 0;
+#if defined(VW_HAVE_PKG_JPEG) && VW_HAVE_PKG_JPEG==1
+    if (ct == "jpg" || ct == "jpeg" || ct == "image/jpeg")
+      result = new SrcMemoryImageResourceJPEG(data, len);
+#endif
+#if defined(VW_HAVE_PKG_PNG) && VW_HAVE_PKG_PNG==1
+    if (ct == "png" || ct == "image/png")
+      result = new SrcMemoryImageResourcePNG(data, len);
+#endif
+#if defined(VW_HAVE_PKG_GDAL) && VW_HAVE_PKG_GDAL==1
+    if (ct == "tif" || ct == "tiff" || ct == "image/tiff")
+      result = new SrcMemoryImageResourceGDAL(data, len);
+#endif
+#if defined(VW_HAVE_PKG_OPENEXR) && VW_HAVE_PKG_OPENEXR==1
+    if (ct == "exr" || ct == "image/exr")
+      result = new SrcMemoryImageResourceOpenEXR(data, len);
+#endif
+    if (result == 0)
       vw_throw( NoImplErr() << "Unsupported file format: " << type );
-    return i->second(data, len);
+    return result;
   }
 
   DstMemoryImageResource* DstMemoryImageResource::create( const std::string& type, const ImageFormat& format ) {
-    create_map_t::const_iterator i = create_map.find(clean_type(type));
-    if (i == create_map.end())
+
+    const std::string ct = clean_type(type);
+    DstMemoryImageResource* result = 0;
+#if defined(VW_HAVE_PKG_JPEG) && VW_HAVE_PKG_JPEG==1
+    if (ct == "jpg" || ct == "jpeg" || ct == "image/jpeg")
+      result = new DstMemoryImageResourceJPEG(format);
+#endif
+#if defined(VW_HAVE_PKG_PNG) && VW_HAVE_PKG_PNG==1
+    if (ct == "png" || ct == "image/png")
+      result = new DstMemoryImageResourcePNG(format);
+#endif
+#if defined(VW_HAVE_PKG_GDAL) && VW_HAVE_PKG_GDAL==1
+    if (ct == "tif" || ct == "tiff" || ct == "image/tiff")
+      result = new DstMemoryImageResourceGDAL(format);
+#endif
+#if defined(VW_HAVE_PKG_OPENEXR) && VW_HAVE_PKG_OPENEXR==1
+    if (ct == "exr" || ct == "image/exr")
+      result = new DstMemoryImageResourceOpenEXR(format);
+#endif
+    
+    if (result == 0)
       vw_throw( NoImplErr() << "Unsupported file format: " << type );
-    return i->second(format);
+    return result;
   }
 
 } // namespace vw
