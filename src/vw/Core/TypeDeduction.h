@@ -202,32 +202,38 @@ namespace vw {
 
   template <class Arg1T, class Arg2T>
   struct PromoteType {
-    typedef typename PromoteTypeSpecialization<typename boost::remove_cv<Arg1T>::type,
-                                               typename boost::remove_cv<Arg2T>::type>::type type;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg1T>::type>::type CleanT1;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg2T>::type>::type CleanT2;
+    typedef typename PromoteTypeSpecialization<CleanT1, CleanT2>::type type;
   };
 
+  // Make sure the output type is not a reference just because one input is a reference.
   template <class Arg1T, class Arg2T>
   struct SumType {
-    typedef typename SumTypeSpecialization<typename boost::remove_cv<Arg1T>::type,
-                                           typename boost::remove_cv<Arg2T>::type>::type type;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg1T>::type>::type CleanT1;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg2T>::type>::type CleanT2;
+    typedef typename SumTypeSpecialization<CleanT1, CleanT2>::type type;
   };
 
   template <class Arg1T, class Arg2T>
   struct DifferenceType {
-    typedef typename DifferenceTypeSpecialization<typename boost::remove_cv<Arg1T>::type,
-                                                  typename boost::remove_cv<Arg2T>::type>::type type;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg1T>::type>::type CleanT1;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg2T>::type>::type CleanT2;
+    typedef typename DifferenceTypeSpecialization<CleanT1, CleanT2>::type type;
   };
 
   template <class Arg1T, class Arg2T>
   struct ProductType {
-    typedef typename ProductTypeSpecialization<typename boost::remove_cv<Arg1T>::type,
-                                               typename boost::remove_cv<Arg2T>::type>::type type;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg1T>::type>::type CleanT1;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg2T>::type>::type CleanT2;
+    typedef typename ProductTypeSpecialization<CleanT1, CleanT2>::type type;
   };
 
   template <class Arg1T, class Arg2T>
   struct QuotientType {
-    typedef typename QuotientTypeSpecialization<typename boost::remove_cv<Arg1T>::type,
-                                                typename boost::remove_cv<Arg2T>::type>::type type;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg1T>::type>::type CleanT1;
+    typedef typename boost::remove_reference<typename boost::remove_cv<Arg2T>::type>::type CleanT2;
+    typedef typename QuotientTypeSpecialization<CleanT1, CleanT2>::type type;
   };
 
   /// \endcond

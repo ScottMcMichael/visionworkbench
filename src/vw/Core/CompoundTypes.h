@@ -351,8 +351,8 @@ namespace vw {
 
     template <class F, class ArgT>
     struct result<F(ArgT)> {
-      typedef typename CompoundChannelType<ArgT>::type arg_type;
-      typedef typename boost::result_of<FuncT(arg_type)>::type result_type;
+      typedef typename CompoundChannelType<ArgT>::type             arg_type;
+      typedef typename boost::result_of<FuncT(arg_type)>::type     result_type;
       typedef typename CompoundChannelCast<ArgT,result_type>::type type;
     };
 
