@@ -23,6 +23,7 @@
 #include <vw/Camera/PinholeModel.h>
 #include <vw/Camera/LensDistortion.h>
 #include <vw/Camera/CameraUtilities.h>
+#include <vw/Camera/CameraSolve.h>
 
 #if defined(VW_HAVE_PKG_LAPACK)
 #include <vw/Math/LinearAlgebra.h>
@@ -47,7 +48,8 @@ PinholeModel::PinholeModel() : m_distortion(DistortPtr(new NullLensDistortion)),
                                m_u_direction(Vector3(1,0,0)),
                                m_v_direction(Vector3(0,1,0)),
                                m_w_direction(Vector3(0,0,1)), m_pixel_pitch(1),
-                               m_do_point_to_pixel_check(true) {
+                               m_do_point_to_pixel_check(true),
+                               m_camera_velocity(Vector3(0,0,0)){
 
   m_rotation.set_identity();
   this->rebuild_camera_matrix();
@@ -72,6 +74,7 @@ PinholeModel::PinholeModel(PinholeModel const& other) :
     m_w_direction  (other.m_w_direction),
     m_pixel_pitch  (other.m_pixel_pitch),
     m_do_point_to_pixel_check(other.m_do_point_to_pixel_check),
+    m_camera_velocity(other.m_camera_velocity),
     m_inv_camera_transform(other.m_inv_camera_transform) {
 }
 
@@ -87,7 +90,8 @@ PinholeModel::PinholeModel(Vector3 camera_center, Matrix<double,3,3> rotation,
                                                  m_v_direction(v_direction),
                                                  m_w_direction(w_direction),
                                                  m_pixel_pitch(pixel_pitch),
-                                                 m_do_point_to_pixel_check(true) {
+                                                 m_do_point_to_pixel_check(true),
+                                                 m_camera_velocity(Vector3(0,0,0)) {
   if (distortion_model)
     m_distortion = distortion_model->copy();
   else
@@ -105,6 +109,7 @@ PinholeModel::PinholeModel(Vector3 camera_center, Matrix<double,3,3> rotation,
                                                  m_v_direction(Vector3(0,1,0)),
                                                  m_w_direction(Vector3(0,0,1)),
                                                  m_pixel_pitch(pixel_pitch),
+                                                 m_camera_velocity(Vector3(0,0,0)),
                                                  m_do_point_to_pixel_check(true) {
   if (distortion_model)
     m_distortion = distortion_model->copy();
@@ -319,6 +324,19 @@ bool PinholeModel::construct_lens_distortion(std::string const& config_line,
     return false;
 }
 
+
+void PinholeModel::set_camera_velocity(Vector3 value)  {
+
+  // Only allow correction with lens distortion models that will not produce a nested 
+  // solver optimization call!
+  if (!m_distortion->has_fast_undistort())
+    vw_throw( ArgumentErr() << 
+              "PinholeModel: Velocity/Aberration correction is not compatible with distortion model = "
+              << m_distortion->name() );
+  
+  m_camera_velocity = value;
+}
+
 void PinholeModel::write(std::string const& filename) const {
 
   update_rpc_undistortion(*this);
@@ -363,6 +381,10 @@ void PinholeModel::write(std::string const& filename) const {
 
 Vector2 PinholeModel::point_to_pixel_no_check(Vector3 const& point) const {
 
+  // This method is slower but is required for including certain corrections.
+  if (is_correcting_velocity_aberration())
+    return point_to_pixel_solver(point);
+  
   // Multiply the pixel location by the 3x4 camera matrix.
   // - The pixel coordinate is de-homogenized by dividing by the denominator.
   double denominator = m_camera_matrix(2,0)*point(0) + m_camera_matrix(2,1)*point(1) +
@@ -385,8 +407,9 @@ Vector2 PinholeModel::point_to_pixel(Vector3 const& point) const {
 
   // Get the pixel using the no check version, then perform the check.
   Vector2 final_pixel = point_to_pixel_no_check(point);
-  
-  if (!m_do_point_to_pixel_check)
+
+  // If we are using the solver method we don't need to do the check.
+  if (!m_do_point_to_pixel_check || is_correcting_velocity_aberration())
     return final_pixel;
 
   // Go back from the pixel to the vector and see how much difference there is.
@@ -407,6 +430,10 @@ Vector2 PinholeModel::point_to_pixel(Vector3 const& point) const {
 
 Vector2 PinholeModel::point_to_pixel_no_distortion(Vector3 const& point) const {
 
+  // This method is slower but is required for including certain corrections.
+  if (is_correcting_velocity_aberration())
+    return point_to_pixel_solver(point);
+
   // Multiply the pixel location by the 3x4 camera matrix.
   // - The pixel coordinate is de-homogenized by dividing by the denominator.
   double denominator = m_camera_matrix(2,0)*point(0) + m_camera_matrix(2,1)*point(1) +
@@ -421,6 +448,29 @@ Vector2 PinholeModel::point_to_pixel_no_distortion(Vector3 const& point) const {
   return pixel/m_pixel_pitch;
 }
 
+
+Vector2 PinholeModel::point_to_pixel_solver(Vector3 const& point) const {
+
+  // Use the generic solver to find the pixel 
+  CameraGenericLMA model( this, point );
+  int status;
+  Vector2 start(0, 0); // DEBUG
+
+  // Solver constants
+  const double ABS_TOL = 1e-16;
+  const double REL_TOL = 1e-16;
+  const int    MAX_ITERATIONS = 1e+5;
+
+  Vector3 objective(0, 0, 0);
+  Vector2 solution = math::levenberg_marquardtFixed<CameraGenericLMA, 2,3>(model, start, objective, status,
+                                               ABS_TOL, REL_TOL, MAX_ITERATIONS);
+  VW_ASSERT( status > 0,
+             camera::PointToPixelErr() << "Unable to project point into Pinhole model" );
+
+  return solution;
+}
+
+
 bool PinholeModel::projection_valid(Vector3 const& point) const {
   // z coordinate after extrinsic transformation
   double z = m_extrinsics(2, 0)*point(0) + m_extrinsics(2, 1)*point(1) +
@@ -428,14 +478,38 @@ bool PinholeModel::projection_valid(Vector3 const& point) const {
   return z > 0;
 }
 
-Vector3 PinholeModel::pixel_to_vector (Vector2 const& pix) const {
+Vector3 PinholeModel::pixel_to_vector(Vector2 const& pix) const {
   // Apply the inverse lens distortion model
   Vector2 undistorted_pix = m_distortion->undistorted_coordinates(*this, pix*m_pixel_pitch);
 
   // Compute the direction of the ray emanating from the camera center.
   Vector3 p(0,0,1);
   subvector(p,0,2) = undistorted_pix;
-  return normalize( m_inv_camera_transform * p);
+  Vector3 output_vector = normalize( m_inv_camera_transform * p);
+  
+  //if (!is_correcting_velocity_aberration())
+    return output_vector;
+    
+  Vector3 cam_ctr = camera_center(pix);
+  
+  double mean_earth_radius = 6371000; // DEBUG
+  double mean_surface_elevation = 0;
+  output_vector = apply_atmospheric_refraction_correction(cam_ctr, mean_earth_radius,
+                                                          mean_surface_elevation, output_vector);
+
+  if (m_camera_velocity == Vector3(0,0,0))
+      return output_vector;
+  else
+    return apply_velocity_aberration_correction(cam_ctr, m_camera_velocity,
+                                                mean_earth_radius, output_vector);
+  
+  /*
+  output_vector = apply_atmospheric_refraction_correction(cam_ctr, m_mean_earth_radius,
+                                                          m_mean_surface_elevation, output_vector);
+
+  return apply_velocity_aberration_correction(cam_ctr, m_camera_velocity,
+                                              m_mean_earth_radius, output_vector);
+  */
 }
 
 Vector3 PinholeModel::camera_center(Vector2 const& /*pix*/ ) const {

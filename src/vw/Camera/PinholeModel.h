@@ -115,6 +115,9 @@ namespace camera {
     /// - Default is true.
     bool m_do_point_to_pixel_check;
 
+    /// A constant value.  If set, perform aberration/atmospheric correction.
+    Vector3 m_camera_velocity;
+
     /// Cached values for pixel_to_vector
     Matrix<double,3,3> m_inv_camera_transform;
 
@@ -211,12 +214,22 @@ namespace camera {
     virtual Vector2 point_to_pixel(Vector3 const& point) const;
 
     /// Skips the pixel_to_vector call used for a sanity check in point_to_pixel.
+    /// - Does include distortion
     Vector2 point_to_pixel_no_check(Vector3 const& point) const;
 
     /// Option to turn off and on the point to pixel check (default is on).
     void set_do_point_to_pixel_check(bool value) {m_do_point_to_pixel_check = value;}
+    
+    /// Set the constant camera velocity and enable atmospheric and
+    /// velocity aberration corrections to be performed.
+    /// - This is not compatible with all types of lens distortion and
+    ///   will throw if things are not set up correctly!
+    void set_camera_velocity(Vector3 value);
+    
+    bool is_correcting_velocity_aberration() const {return false;} // DEBUG
 
     /// As point_to_pixel, but ignoring any lens distortion.
+    /// - Does not include the reverse check
     Vector2 point_to_pixel_no_distortion(Vector3 const& point) const;
 
     // Is a valid projection of point is possible?
@@ -296,6 +309,9 @@ namespace camera {
     /// - Returns true if it found a name or false if it did not and
     ///   just created the default TSAI distortion model.
     bool construct_lens_distortion(std::string const& config_line, int camera_version);
+    
+    /// Compute point_to_pixel using a solver based on pixel_to_vector.
+    Vector2 point_to_pixel_solver(Vector3 const& point) const;
   };
 
   // TODO: Any use for an epipolar alignment function that operates on pinhole cameras?
